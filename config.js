@@ -65,7 +65,7 @@ export default {
   preprocessSTAC: null,
   authConfig: null,
   oidcConfigs: {},
-  tokenExchangeUrls: [],
+  tokenExchanges: {},
   transactions: 'auto',
   transactionsRequireLogin: true,
   transactionsRequirePreflight: true,

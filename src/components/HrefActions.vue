@@ -100,8 +100,8 @@ export default {
     };
   },
   computed: {
-    ...mapState(['downloads', 'requestHeaders', 'buildTileUrlTemplate', 'useTileLayerAsFallback']),
-    ...mapGetters(['getRequestUrl', 'receivesCredentials']),
+    ...mapState(['downloads', 'buildTileUrlTemplate', 'useTileLayerAsFallback']),
+    ...mapGetters(['getRequestUrl', 'getRequestHeaders']),
     ...mapGetters('auth', ['isLoggedIn']),
     ...mapGetters({ authMethod: 'auth/method' }),
     loading() {
@@ -132,7 +132,7 @@ export default {
       if (typeof this.data.href !== 'string') {
         return false;
       }
-      return size(this.requestHeaders) > 0 && this.receivesCredentials(this.data.getAbsoluteUrl());
+      return size(this.getRequestHeaders(this.data.getAbsoluteUrl())) > 0;
     },
     actions() {
       if (this.requiresAuth || this.requiresHeaderCredentials) {
@@ -208,7 +208,7 @@ export default {
       else if (typeof this.data.method === 'string' && this.data.method.toUpperCase() !== 'GET') {
         return true;
       }
-      else if (size(this.data.headers) > 0 || (size(this.requestHeaders) > 0 && this.receivesCredentials(this.data.getAbsoluteUrl()))) {
+      else if (size(this.data.headers) > 0 || size(this.getRequestHeaders(this.data.getAbsoluteUrl())) > 0) {
         return true;
       }
       return false;

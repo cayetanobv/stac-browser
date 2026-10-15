@@ -26,13 +26,19 @@ export default class TokenExchange extends OIDC {
     super(router, TokenExchange.getIdentityScheme(options), changeListener, appConfig);
     this.options = options;
     this.renewTimer = null;
-    this.trusted = AuthUtils.isTrustedTokenUrl(options.flows.tokenExchange.tokenUrl, appConfig);
+    // Operator allowed URL prefixes for the exchanged credentials, null if the exchange isn't allowed
+    this.dataUrls = AuthUtils.getTokenExchangeDataUrls(options.flows.tokenExchange.tokenUrl, appConfig);
+    // Discards the results of exchanges that were started before a newer one or closing
+    this.generation = 0;
+    this.closed = false;
   }
 
   receivesCredentials(url) {
     // The exchanged credentials are only meant for the assets and links
-    // that reference the scheme, regardless of whether they are external.
-    return AuthUtils.matchesUrlPrefix(url, this.options.urlPrefixes);
+    // that reference the scheme, regardless of whether they are external,
+    // and only within the URLs allowed by the operator.
+    return AuthUtils.matchesUrlPrefix(url, this.options.urlPrefixes)
+      && AuthUtils.matchesUrlPrefix(url, this.dataUrls);
   }
 
   static getIdentityScheme(options) {
@@ -54,7 +60,7 @@ export default class TokenExchange extends OIDC {
   }
 
   async exchange(user) {
-    if (!this.trusted) {
+    if (this.dataUrls === null) {
       throw new Error(`The token exchange URL ${this.flow.tokenUrl} is not allowed.`);
     }
     const params = new URLSearchParams({
@@ -103,10 +109,16 @@ export default class TokenExchange extends OIDC {
   async close() { // eslint-disable-line require-await
     // Keep the identity session so that the exchange for another
     // STAC document doesn't require the user to log in again.
+    this.closed = true;
+    this.generation++;
     this.clearRenewal();
   }
 
   async setUser(user = null) {
+    if (this.closed) {
+      return;
+    }
+    const generation = ++this.generation;
     this.user = user;
     this.clearRenewal();
     if (!user) {
@@ -117,8 +129,14 @@ export default class TokenExchange extends OIDC {
     try {
       token = await this.exchange(user);
     } catch (error) {
-      await this.changeListener(false);
+      if (generation === this.generation) {
+        await this.changeListener(false);
+      }
       throw error;
+    }
+    if (generation !== this.generation) {
+      // Closed or superseded by a newer exchange in the meantime
+      return;
     }
     this.scheduleRenewal(token.expires_in);
     await this.changeListener(true, token.access_token);

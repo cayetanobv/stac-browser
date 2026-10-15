@@ -654,7 +654,7 @@ test.describe('STAC Authentication extension', () => {
   }
 
   test('token exchange: exchanges the OpenID Connect token for the credentials', async ({ page, worker }) => {
-    const { item, exchanges, thumbnails, publicThumbnails } = await setupTokenExchange(page, worker, { tokenExchangeUrls: [TOKEN_URL] });
+    const { item, exchanges, thumbnails, publicThumbnails } = await setupTokenExchange(page, worker, { tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] } });
 
     await expect.poll(() => exchanges.length).toBe(1);
     expect(exchanges[0]).toEqual({
@@ -673,9 +673,33 @@ test.describe('STAC Authentication extension', () => {
   });
 
   test('token exchange: the token is not sent to token URLs that are not allowed', async ({ page, worker }) => {
-    const { exchanges } = await setupTokenExchange(page, worker, { tokenExchangeUrls: ['https://other.example/token'] });
+    const { exchanges } = await setupTokenExchange(page, worker, { tokenExchanges: { 'https://other.example/token': ['https://data.example/'] } });
 
     await expect(page.getByText(/is not supported by STAC Browser/i)).toBeVisible();
     expect(exchanges).toHaveLength(0);
+  });
+  test('token exchange: the credentials are only sent to the URLs allowed by the operator', async ({ page, worker }) => {
+    // The document's assets are in /private/, the operator only allows /public/
+    const { exchanges, thumbnails } = await setupTokenExchange(page, worker, {
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/public/'] },
+    });
+
+    await expect.poll(() => exchanges.length).toBe(1);
+    await page.getByRole('tab', { name: /thumbnails/i }).click();
+    await expect.poll(() => thumbnails.length).toBeGreaterThan(0);
+    expect(thumbnails.every(r => !r.headers.authorization)).toBe(true);
+  });
+
+  test('token exchange: configured request headers are not sent to external data', async ({ page, worker }) => {
+    const { exchanges, thumbnails } = await setupTokenExchange(page, worker, {
+      catalogUrl: ROOT_URL,
+      requestHeaders: { 'X-Static': 'secret' },
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] },
+    });
+
+    await expect.poll(() => exchanges.length).toBe(1);
+    await page.getByRole('tab', { name: /thumbnails/i }).click();
+    await expect.poll(() => thumbnails.some(r => r.headers.authorization === 'Bearer exchanged-token')).toBe(true);
+    expect(thumbnails.every(r => !r.headers['x-static'])).toBe(true);
   });
 });

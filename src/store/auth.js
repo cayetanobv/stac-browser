@@ -21,6 +21,8 @@ export default function getStore(router) {
       method: () => new Auth(router),
       actions: [],
       credentials: null,
+      // The name of the request header that contains the credentials
+      credentialHeader: null,
       inProgress: false
     },
     getters: {
@@ -38,6 +40,9 @@ export default function getStore(router) {
       }
     },
     mutations: {
+      setCredentialHeader(state, key) {
+        state.credentialHeader = key;
+      },
       setCredentials(state, credentials) {
         state.credentials = credentials; // e.g. Username + Password or a Bearer Token
       },
@@ -139,6 +144,7 @@ export default function getStore(router) {
         }
         else if (intent.header) {
           cx.commit('setRequestHeader', intent.header, { root: true });
+          cx.commit('setCredentialHeader', typeof intent.header.value === 'undefined' ? null : intent.header.key);
         }
         else if (intent.cookie) {
           const cookie = new Cookies(true);

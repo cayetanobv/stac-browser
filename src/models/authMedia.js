@@ -54,7 +54,7 @@ function toDataUrl(blob) {
  * @returns {boolean} `true` if an authenticated request is needed.
  */
 export function needsAuthenticatedFetch(store, url) {
-  return size(store.state.requestHeaders) > 0 && store.getters.receivesCredentials(url);
+  return size(store.getters.getRequestHeaders(url)) > 0;
 }
 
 /**

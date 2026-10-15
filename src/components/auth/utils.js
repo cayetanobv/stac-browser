@@ -58,24 +58,36 @@ export default class AuthUtils {
   }
 
   /**
+   * The operator settings for the token URL from the `tokenExchanges` option.
    * The tokenUrl is provided by the STAC document, but the token exchange
-   * sends the user's token to it. Only send it to the token URLs configured
-   * by the operator, otherwise any document could obtain the token.
+   * sends the user's token to it, and the folders that receive the exchanged
+   * credentials are also provided by the document. Only exchanges and folders
+   * allowed by the operator are used, otherwise any document could obtain
+   * the token or the exchanged credentials.
    * 
    * @param {string} tokenUrl
    * @param {Object} config
-   * @returns {boolean}
+   * @returns {Array.<string>|null} The URL prefixes that may receive the exchanged credentials, `null` if not allowed
    */
-  static isTrustedTokenUrl(tokenUrl, config = {}) {
-    if (typeof tokenUrl !== 'string' || !Array.isArray(config.tokenExchangeUrls)) {
-      return false;
+  static getTokenExchangeDataUrls(tokenUrl, config = {}) {
+    if (typeof tokenUrl !== 'string' || !isObject(config.tokenExchanges)) {
+      return null;
     }
     try {
       const url = new URL(tokenUrl);
-      return url.protocol === 'https:' && config.tokenExchangeUrls.some(allowed => new URL(allowed).href === url.href);
+      if (url.protocol !== 'https:') {
+        return null;
+      }
+      for (const [allowed, dataUrls] of Object.entries(config.tokenExchanges)) {
+        if (new URL(allowed).href === url.href) {
+          const prefixes = Array.isArray(dataUrls) ? dataUrls.filter(prefix => typeof prefix === 'string') : [];
+          return prefixes.length > 0 ? prefixes.map(prefix => new URL(prefix).href) : null;
+        }
+      }
     } catch {
-      return false;
+      // Invalid URL
     }
+    return null;
   }
 
   static getDocument(obj) {
@@ -154,7 +166,7 @@ export default class AuthUtils {
         }
         const input = method['auth:schemes'][method['auth:refs'][0]];
         return isObject(input) && input.type === 'openIdConnect' && AuthUtils.isSupported(input, config)
-          && AuthUtils.isTrustedTokenUrl(method.flows.tokenExchange.tokenUrl, config);
+          && AuthUtils.getTokenExchangeDataUrls(method.flows.tokenExchange.tokenUrl, config) !== null;
       }
       default:
         return false;

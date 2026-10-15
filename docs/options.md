@@ -70,7 +70,7 @@ The override order for the configuration is:
     - [OAuth 2.0 Token Exchange](#oauth-20-token-exchange)
     - [What gets authenticated](#what-gets-authenticated)
   - [oidcConfigs](#oidcconfigs)
-  - [tokenExchangeUrls](#tokenexchangeurls)
+  - [tokenExchanges](#tokenexchanges)
 - [Internationalization and Localization](#internationalization-and-localization)
   - [locale](#locale)
   - [fallbackLocale](#fallbacklocale)
@@ -388,7 +388,7 @@ The exchanged credentials are renewed before they expire (`expires_in`).
 As they are specific to a STAC document, the assets of another document require a new exchange.
 The login session of the OpenID Connect provider is reused for it.
 
-The token exchange URL must be allowed through [`tokenExchangeUrls`](#tokenexchangeurls),
+The token exchange URL must be allowed through [`tokenExchanges`](#tokenexchanges),
 otherwise the scheme is shown as unsupported.
 As the OpenID Connect client settings can't be provided in a STAC document,
 provide them through [`oidcConfigs`](#oidcconfigs).
@@ -396,6 +396,8 @@ The exchanged credentials are only sent to the URLs in the folders of the assets
 STAC document that reference the scheme. For example, for an asset at
 `https://storage.googleapis.com/bucket/folder/data.parquet` that's every URL starting with
 `https://storage.googleapis.com/bucket/folder/`, regardless of [`allowedDomains`](#alloweddomains).
+Additionally, the URLs must start with one of the URL prefixes configured for the token URL in
+[`tokenExchanges`](#tokenexchanges).
 They are not sent to any other URL, including the STAC documents of the catalog.
 
 #### What gets authenticated
@@ -445,17 +447,28 @@ in [OpenID Connect](#openid-connect). Defaults to `{}`.
 }
 ```
 
-### tokenExchangeUrls
+### tokenExchanges
 
 ***experimental***
 
-The `tokenUrl`s of [OAuth 2.0 Token Exchange](#oauth-20-token-exchange) schemes that STAC Browser may send the user's token to.
-The URLs must use HTTPS and match exactly. Defaults to `[]`, i.e. token exchange is disabled.
+The [OAuth 2.0 Token Exchanges](#oauth-20-token-exchange) that STAC Browser may perform.
+The keys are the `tokenUrl`s that STAC Browser may send the user's token to, they must use HTTPS and match exactly.
+The values are lists of URL prefixes that may receive the exchanged credentials, e.g. the bucket and folder of the data.
+Defaults to `{}`, i.e. token exchange is disabled.
 
-The token URL is provided by the STAC document, so without this list any STAC document
-(e.g. opened through `/external/`) could obtain the token of a user who is logged in.
+The token URL and the URLs of the data are provided by the STAC document. Without this option, any STAC document
+(e.g. opened through `/external/`) could obtain the token of a user who is logged in or the exchanged credentials.
+Use URL prefixes that end with a `/` and are as specific as possible, as the credentials are sent to all URLs starting with them.
 
-**Example:** `['https://broker.example/oauth/token']`
+**Example:**
+
+```js
+{
+  'https://broker.example/oauth/token': [
+    'https://storage.googleapis.com/private-bucket/'
+  ]
+}
+```
 
 ## Internationalization and Localization
 

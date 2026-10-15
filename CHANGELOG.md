@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Item Search: Support for the conformance class that requires the `collections` parameter (`item-search#require-collections`)
 - Authentication: Support for OAuth 2.0 Token Exchange (`oauth2` schemes with a `tokenExchange` flow) with the token of an OpenID Connect scheme. The exchanged credentials are only sent to the folders of the assets and links that reference the scheme.
 - New config option `oidcConfigs` provides the OpenID Connect client settings for schemes declared in STAC documents
-- New config option `tokenExchangeUrls` lists the token URLs that STAC Browser may exchange the user's token at
+- New config option `tokenExchanges` lists the token URLs that STAC Browser may exchange the user's token at and the URLs that may receive the exchanged credentials
 
 ### Fixed
 

@@ -179,11 +179,14 @@
         "type": "object"
       }
     },
-    "tokenExchangeUrls": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "format": "uri"
+    "tokenExchanges": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "format": "uri"
+        }
       }
     },
     "transactions": {
