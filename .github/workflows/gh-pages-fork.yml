@@ -38,9 +38,11 @@ jobs:
                 client_id: 'ZkrgGDGUGSyeyqYpDdZdqwM4c3EHrxsZ'
               }
             },
-            tokenExchangeUrls: [
-              'https://sdi-publisher-broker-dev.carto.solutions/oauth/token'
-            ]
+            tokenExchanges: {
+              'https://sdi-publisher-broker-dev.carto.solutions/oauth/token': [
+                'https://storage.googleapis.com/carto-ps-portolan-sdi-dev-catalog-private/'
+              ]
+            }
           };
           EOF
       - name: Build
