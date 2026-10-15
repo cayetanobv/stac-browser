@@ -64,6 +64,10 @@ export default function getStore(router) {
       async updateMethod(cx, config) {
         if (!Auth.equals(cx.getters.method, config)) {
           await cx.getters.method.close();
+          // Don't keep sending the credentials of the previous method
+          if (cx.getters.isLoggedIn) {
+            await cx.dispatch('updateCredentials', null);
+          }
         }
 
         const changeListener = async (isLoggedIn, credentials) => {
@@ -82,7 +86,7 @@ export default function getStore(router) {
           }
         };
 
-        const newAuth = await Auth.create(router, config, changeListener);
+        const newAuth = await Auth.create(router, config, changeListener, cx.rootState);
         cx.commit('setMethod', newAuth);
         await newAuth.resume();
       },

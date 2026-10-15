@@ -52,6 +52,17 @@ export default class Auth {
     return null;
   }
 
+  /**
+   * Whether the credentials are sent to the given URL.
+   * 
+   * @param {string|Object} url The absolute URL
+   * @param {boolean} isExternal Whether the URL is not part of the catalog (see `allowedDomains`)
+   * @returns {boolean}
+   */
+  receivesCredentials(url, isExternal) {
+    return !isExternal;
+  }
+
   getComponentProps() {
     return {};
   }
@@ -159,7 +170,7 @@ export default class Auth {
     }
   }
 
-  static async create(router, config, changeListener) {
+  static async create(router, config, changeListener, appConfig = {}) {
     let method = new Auth(router, config, changeListener);
     if (isObject(config)) {
       if (config.type === 'http' && config.scheme === 'basic') {
@@ -172,7 +183,11 @@ export default class Auth {
       }
       else if (config.type === 'openIdConnect') {
         const OIDC = (await import('./oidc')).default;
-        method = new OIDC(router, config, changeListener);
+        method = new OIDC(router, config, changeListener, appConfig);
+      }
+      else if (config.type === 'oauth2' && isObject(config.flows) && isObject(config.flows.tokenExchange)) {
+        const TokenExchange = (await import('./tokenExchange')).default;
+        method = new TokenExchange(router, config, changeListener, appConfig);
       }
     }
     await method.init();

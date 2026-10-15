@@ -1,10 +1,11 @@
 import Auth from "./index";
 
 import { UserManager } from 'oidc-client-ts';
+import { isObject } from 'stac-js/src/utils.js';
 
 export default class OIDC extends Auth {
 
-  constructor(router, options, changeListener) {
+  constructor(router, options, changeListener, appConfig = {}) {
     super(router, options, changeListener);
 
     const oidcConfig = {
@@ -15,7 +16,9 @@ export default class OIDC extends Auth {
       automaticSilentRenew: true
     };
     this.user = null;
-    this.manager = new UserManager(Object.assign(oidcConfig, options.oidcConfig));
+    // Client settings for schemes from STAC documents, which can't provide them
+    const clientConfig = isObject(appConfig.oidcConfigs) ? appConfig.oidcConfigs[options.openIdConnectUrl] : null;
+    this.manager = new UserManager(Object.assign(oidcConfig, clientConfig, options.oidcConfig));
     this.manager.events.addUserLoaded(async () => this.setUser(await this.manager.getUser()));
     this.manager.events.addAccessTokenExpired(() => this.setUser(null));
     this.manager.events.addUserUnloaded(() => this.setUser(null));

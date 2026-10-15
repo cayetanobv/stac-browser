@@ -33,7 +33,7 @@ export function stacRequestOptions(cx, link) {
   if (hasText(link.type)) {
     headers.Accept = link.type;
   }
-  if (!cx.getters.isExternalUrl(url)) {
+  if (cx.getters.receivesCredentials(url)) {
     Object.assign(headers, cx.state.requestHeaders);
   }
   if (isObject(link.headers)) {

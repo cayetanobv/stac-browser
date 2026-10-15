@@ -173,6 +173,19 @@
         }
       ]
     },
+    "oidcConfigs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
+    "tokenExchangeUrls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
     "transactions": {
       "type": "string",
       "enum": ["auto", "external", "internal", "off"]

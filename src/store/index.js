@@ -558,12 +558,18 @@ function getStore(config, router) {
         let relativeStr = relative.toString();
         return relativeStr.startsWith('//') || relativeStr.startsWith('../');
       },
+      // Whether the credentials of the authentication method are sent to the URL
+      receivesCredentials: (state, getters) => (absoluteUrl) => {
+        return getters['auth/method'].receivesCredentials(absoluteUrl, getters.isExternalUrl(absoluteUrl));
+      },
       getRequestUrl: (state, getters) => (url, baseUrl = null, addLocalQueryParams = false) => {
         try {
           let absoluteUrl = toAbsolute(url, baseUrl ? baseUrl : state.url, false);
-          if (!getters.isExternalUrl(absoluteUrl)) {
-            // Check whether private params are present and add them if the URL is part of the catalog
+          if (getters.receivesCredentials(absoluteUrl)) {
+            // Check whether private params are present and add them if the URL may receive the credentials
             addQueryIfNotExists(absoluteUrl, state.privateQueryParameters);
+          }
+          if (!getters.isExternalUrl(absoluteUrl)) {
             // Check if we need to add global request params
             addQueryIfNotExists(absoluteUrl, state.globalRequestQueryParameters);
             if (addLocalQueryParams) {
