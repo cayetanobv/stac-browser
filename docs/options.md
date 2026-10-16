@@ -67,6 +67,7 @@ The override order for the configuration is:
     - [API Keys](#api-keys)
     - [HTTP Basic](#http-basic)
     - [OpenID Connect](#openid-connect)
+    - [Client ID of schemes in STAC documents](#client-id-of-schemes-in-stac-documents)
     - [OAuth 2.0 Token Exchange](#oauth-20-token-exchange)
     - [What gets authenticated](#what-gets-authenticated)
   - [oidcConfigs](#oidcconfigs)
@@ -365,6 +366,23 @@ For a given token `123` this results in the following additional HTTP Header:
 
 You can change the default behaviour to send it as a Bearer token by providing `in`, `name` and `format`.
 
+#### Client ID of schemes in STAC documents
+
+For `openIdConnect` schemes declared in STAC documents, the document can provide the client ID
+in a `clientId` field next to `openIdConnectUrl`. It's not part of the Authentication extension yet.
+
+```json
+"oidc": {
+  "type": "openIdConnect",
+  "openIdConnectUrl": "https://auth.example.com/.well-known/openid-configuration",
+  "clientId": "abc123"
+}
+```
+
+The STAC Browser URL plus `/auth` must be registered as a redirect URL for that client.
+The client settings configured through [`oidcConfigs`](#oidcconfigs) take priority over the document.
+An `oidcConfig` in a STAC document is ignored, as it could change any setting of the login, e.g. its endpoints.
+
 #### OAuth 2.0 Token Exchange
 
 STAC Browser supports the `tokenExchange` flow of `oauth2` schemes
@@ -390,8 +408,9 @@ The login session of the OpenID Connect provider is reused for it.
 
 The token exchange URL must be allowed through [`tokenExchanges`](#tokenexchanges),
 otherwise the scheme is shown as unsupported.
-As the OpenID Connect client settings can't be provided in a STAC document,
-provide them through [`oidcConfigs`](#oidcconfigs).
+The OpenID Connect scheme must provide the client ID to sign in with, see
+[Client ID of schemes in STAC documents](#client-id-of-schemes-in-stac-documents),
+otherwise the scheme is shown as unsupported.
 The exchanged credentials are only sent to the URLs in the folders of the assets and links of the
 STAC document that reference the scheme. For example, for an asset at
 `https://storage.googleapis.com/bucket/folder/data.parquet` that's every URL starting with
@@ -433,6 +452,8 @@ Known limitations:
 OpenID Connect client settings for the `openIdConnect` schemes that are declared in STAC documents
 (through the [Authentication extension](https://github.com/stac-extensions/authentication)), incl.
 the ones that supply the token for an [OAuth 2.0 Token Exchange](#oauth-20-token-exchange).
+They take priority over the `clientId` of the document, e.g. to use a client registered for this
+STAC Browser instance.
 
 The keys are the `openIdConnectUrl` of the schemes, the values are the same as for `oidcConfig`
 in [OpenID Connect](#openid-connect). Defaults to `{}`.

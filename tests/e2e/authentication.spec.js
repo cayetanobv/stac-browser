@@ -590,7 +590,8 @@ test.describe('STAC Authentication extension', () => {
 
   // An item with an asset that requires a token exchange, a user who is
   // logged in at the OpenID Connect provider and a mocked token endpoint.
-  async function setupTokenExchange(page, worker, config) {
+  // `oidc` overrides the OpenID Connect scheme of the document, `config` the browser config
+  async function setupTokenExchange(page, worker, config, oidc = {}) {
     await configureBrowser(page, {
       oidcConfigs: { [OIDC_URL]: { client_id: 'browser-client' } },
       ...config,
@@ -610,7 +611,7 @@ test.describe('STAC Authentication extension', () => {
     const item = catalog.addItem({ url: 'https://stac.example/item.json' });
     item.setMetadata({
       'auth:schemes': {
-        oidc: { type: 'openIdConnect', openIdConnectUrl: OIDC_URL },
+        oidc: { type: 'openIdConnect', openIdConnectUrl: OIDC_URL, ...oidc },
         exchange: {
           type: 'oauth2',
           'auth:refs': ['oidc'],
@@ -701,5 +702,33 @@ test.describe('STAC Authentication extension', () => {
     await page.getByRole('tab', { name: /thumbnails/i }).click();
     await expect.poll(() => thumbnails.some(r => r.headers.authorization === 'Bearer exchanged-token')).toBe(true);
     expect(thumbnails.every(r => !r.headers['x-static'])).toBe(true);
+  });
+  test('token exchange: the client ID can come from the document', async ({ page, worker }) => {
+    const { exchanges } = await setupTokenExchange(page, worker, {
+      oidcConfigs: {},
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] },
+    }, { clientId: 'browser-client' });
+
+    // The session of the client the document names is used
+    await expect.poll(() => exchanges.length).toBe(1);
+    expect(exchanges[0].subject_token).toBe('identity-token');
+  });
+
+  test('token exchange: the operator\'s client ID takes priority over the document', async ({ page, worker }) => {
+    const { exchanges } = await setupTokenExchange(page, worker, {
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] },
+    }, { clientId: 'other-client' });
+
+    await expect.poll(() => exchanges.length).toBe(1);
+  });
+
+  test('token exchange: a document\'s oidcConfig is ignored, without a client ID the scheme is unsupported', async ({ page, worker }) => {
+    const { exchanges } = await setupTokenExchange(page, worker, {
+      oidcConfigs: {},
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] },
+    }, { oidcConfig: { client_id: 'browser-client', metadata: { token_endpoint: 'https://evil.example/token' } } });
+
+    await expect(page.getByText(/is not supported by STAC Browser/i)).toBeVisible();
+    expect(exchanges).toHaveLength(0);
   });
 });

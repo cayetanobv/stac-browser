@@ -1,4 +1,4 @@
-import { isObject, size } from 'stac-js/src/utils.js';
+import { hasText, isObject, size } from 'stac-js/src/utils.js';
 import { STAC, STACReference } from 'stac-js';
 import Auth from '../../auth/index.js';
 
@@ -15,6 +15,39 @@ export default class AuthUtils {
       }
     }
     return [];
+  }
+
+  /**
+   * A scheme from a STAC document without the settings that only the operator may set.
+   * The client settings in `oidcConfig` are passed to the OpenID Connect library as they are,
+   * incl. its endpoints, so a document could send the login to another server.
+   * Documents provide the client ID in `clientId` instead.
+   * 
+   * @param {Object} scheme
+   * @returns {Object}
+   */
+  static fromDocument(scheme) {
+    const copy = Object.assign({}, scheme);
+    delete copy.oidcConfig;
+    return copy;
+  }
+
+  /**
+   * The client ID for an OpenID Connect scheme: the operator's `oidcConfigs`
+   * or `oidcConfig` take priority over the `clientId` of the document.
+   * 
+   * @param {Object} scheme
+   * @param {Object} config
+   * @returns {string|null}
+   */
+  static getClientId(scheme, config = {}) {
+    const operator = isObject(config.oidcConfigs) ? config.oidcConfigs[scheme.openIdConnectUrl] : null;
+    const candidates = [
+      isObject(scheme.oidcConfig) ? scheme.oidcConfig.client_id : null,
+      isObject(operator) ? operator.client_id : null,
+      scheme.clientId
+    ];
+    return candidates.find(id => hasText(id)) || null;
   }
 
   static isTokenExchange(method) {
@@ -37,7 +70,7 @@ export default class AuthUtils {
    * @returns {Array.<Object>}
    */
   static resolveInput(key, schemes, obj) {
-    const scheme = schemes[key];
+    const scheme = AuthUtils.fromDocument(schemes[key]);
     if (!AuthUtils.isTokenExchange(scheme)) {
       return [scheme];
     }
@@ -49,7 +82,7 @@ export default class AuthUtils {
       .filter(ref => isObject(schemes[ref]))
       .map(ref => Object.assign({}, scheme, {
         'auth:refs': [ref],
-        'auth:schemes': { [ref]: schemes[ref] },
+        'auth:schemes': { [ref]: AuthUtils.fromDocument(schemes[ref]) },
         resource,
         urlPrefixes
       }));
@@ -160,12 +193,13 @@ export default class AuthUtils {
       case 'openIdConnect':
         return (config.historyMode === 'history');
       case 'oauth2': {
-        // Token exchange with the token of an OpenID Connect scheme, see resolveInput
+        // Token exchange with the token of an OpenID Connect scheme with a known client, see resolveInput
         if (!AuthUtils.isTokenExchange(method) || size(method['auth:refs']) !== 1 || !isObject(method['auth:schemes'])) {
           return false;
         }
         const input = method['auth:schemes'][method['auth:refs'][0]];
         return isObject(input) && input.type === 'openIdConnect' && AuthUtils.isSupported(input, config)
+          && AuthUtils.getClientId(input, config) !== null
           && AuthUtils.getTokenExchangeDataUrls(method.flows.tokenExchange.tokenUrl, config) !== null;
       }
       default:
