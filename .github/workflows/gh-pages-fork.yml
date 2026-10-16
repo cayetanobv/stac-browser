@@ -33,11 +33,6 @@ jobs:
           export default {
             pathPrefix: '/stac-browser/',
             historyMode: 'history',
-            oidcConfigs: {
-              'https://carto-sdi.eu.auth0.com/.well-known/openid-configuration': {
-                client_id: 'ZkrgGDGUGSyeyqYpDdZdqwM4c3EHrxsZ'
-              }
-            },
             tokenExchanges: {
               'https://sdi-publisher-broker-dev.carto.solutions/oauth/token': [
                 'https://storage.googleapis.com/carto-ps-portolan-sdi-dev-catalog-private/'
