@@ -581,4 +581,182 @@ test.describe('STAC Authentication extension', () => {
     await authButton.click();
     await expect(page.getByText(/is not supported by STAC Browser/i)).toBeVisible();
   });
+  const OIDC_URL = 'https://auth.example/.well-known/openid-configuration';
+  const TOKEN_URL = 'https://broker.example/oauth/token';
+  // The data is on another domain, only the folder of the assets
+  // that reference the scheme receives the exchanged credentials
+  const PRIVATE_THUMB_URL = 'https://data.example/private/thumb.png';
+  const PUBLIC_THUMB_URL = 'https://data.example/public/thumb.png';
+
+  // An item with an asset that requires a token exchange, a user who is
+  // logged in at the OpenID Connect provider and a mocked token endpoint.
+  // `oidc` overrides the OpenID Connect scheme of the document, `config` the browser config
+  async function setupTokenExchange(page, worker, config, oidc = {}) {
+    await configureBrowser(page, {
+      oidcConfigs: { [OIDC_URL]: { client_id: 'browser-client' } },
+      ...config,
+    });
+    // The session as stored by oidc-client-ts
+    await page.addInitScript(() => {
+      window.sessionStorage.setItem('oidc.user:https://auth.example:browser-client', JSON.stringify({
+        id_token: 'identity-token',
+        access_token: 'oidc-access-token',
+        token_type: 'Bearer',
+        profile: { sub: 'user' },
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+      }));
+    });
+
+    const catalog = createStaticCatalog();
+    const item = catalog.addItem({ url: 'https://stac.example/item.json' });
+    item.setMetadata({
+      'auth:schemes': {
+        oidc: { type: 'openIdConnect', openIdConnectUrl: OIDC_URL, ...oidc },
+        exchange: {
+          type: 'oauth2',
+          'auth:refs': ['oidc'],
+          flows: {
+            tokenExchange: {
+              tokenUrl: TOKEN_URL,
+              subjectTokenType: 'urn:ietf:params:oauth:token-type:id_token',
+              scopes: { 'read:data': 'Read the data' },
+            },
+          },
+        },
+      },
+    });
+    item.data.assets.data.href = 'https://data.example/private/data.tif';
+    item.data.assets.data['auth:refs'] = ['exchange'];
+    item.data.assets.thumbnail.href = PRIVATE_THUMB_URL;
+    item.data.assets.thumbnail['auth:refs'] = ['exchange'];
+    item.data.assets.overview = { href: PUBLIC_THUMB_URL, type: 'image/png', roles: ['thumbnail'] };
+    await catalog.createServer(worker);
+    const thumbnails = await mockImage(worker, PRIVATE_THUMB_URL, hasHeader('authorization', 'Bearer exchanged-token'));
+    const publicThumbnails = await mockImage(worker, PUBLIC_THUMB_URL);
+
+    const exchanges = [];
+    await worker.use(
+      http.post(TOKEN_URL, async ({ request }) => {
+        exchanges.push(Object.fromEntries(new URLSearchParams(await request.text())));
+        return HttpResponse.json({
+          access_token: 'exchanged-token',
+          issued_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        });
+      }),
+    );
+
+    await page.goto(item.getBrowserPath());
+    await waitForBrowserReady(page);
+    await page.getByRole('button', { name: /measurements/i }).click();
+    await page.getByRole('button', { name: /authentication required/i }).first().click();
+    return { item, exchanges, thumbnails, publicThumbnails };
+  }
+
+  test('token exchange: exchanges the OpenID Connect token for the credentials', async ({ page, worker }) => {
+    const { item, exchanges, thumbnails, publicThumbnails } = await setupTokenExchange(page, worker, { tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] } });
+
+    await expect.poll(() => exchanges.length).toBe(1);
+    expect(exchanges[0]).toEqual({
+      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+      subject_token: 'identity-token',
+      subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
+      resource: item.getAbsoluteUrl(),
+      scope: 'read:data',
+    });
+    await expect(page.getByRole('button', { name: /authentication required/i })).toHaveCount(0);
+
+    await page.getByRole('tab', { name: /thumbnails/i }).click();
+    await expect.poll(() => thumbnails.some(r => r.headers.authorization === 'Bearer exchanged-token')).toBe(true);
+    await expect.poll(() => publicThumbnails.length).toBeGreaterThan(0);
+    expect(publicThumbnails.every(r => !r.headers.authorization)).toBe(true);
+  });
+
+  test('token exchange: the token is not sent to token URLs that are not allowed', async ({ page, worker }) => {
+    const { exchanges } = await setupTokenExchange(page, worker, { tokenExchanges: { 'https://other.example/token': ['https://data.example/'] } });
+
+    await expect(page.getByText(/is not supported by STAC Browser/i)).toBeVisible();
+    expect(exchanges).toHaveLength(0);
+  });
+  test('token exchange: the credentials are only sent to the URLs allowed by the operator', async ({ page, worker }) => {
+    // The document's assets are in /private/, the operator only allows /public/
+    const { exchanges, thumbnails } = await setupTokenExchange(page, worker, {
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/public/'] },
+    });
+
+    await expect.poll(() => exchanges.length).toBe(1);
+    await page.getByRole('tab', { name: /thumbnails/i }).click();
+    await expect.poll(() => thumbnails.length).toBeGreaterThan(0);
+    expect(thumbnails.every(r => !r.headers.authorization)).toBe(true);
+  });
+
+  test('token exchange: configured request headers are not sent to external data', async ({ page, worker }) => {
+    const { exchanges, thumbnails } = await setupTokenExchange(page, worker, {
+      catalogUrl: ROOT_URL,
+      requestHeaders: { 'X-Static': 'secret' },
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] },
+    });
+
+    await expect.poll(() => exchanges.length).toBe(1);
+    await page.getByRole('tab', { name: /thumbnails/i }).click();
+    await expect.poll(() => thumbnails.some(r => r.headers.authorization === 'Bearer exchanged-token')).toBe(true);
+    expect(thumbnails.every(r => !r.headers['x-static'])).toBe(true);
+  });
+  test('token exchange: the client ID can come from the document', async ({ page, worker }) => {
+    const { exchanges } = await setupTokenExchange(page, worker, {
+      oidcConfigs: {},
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] },
+    }, { clientId: 'browser-client' });
+
+    // The session of the client the document names is used
+    await expect.poll(() => exchanges.length).toBe(1);
+    expect(exchanges[0].subject_token).toBe('identity-token');
+  });
+
+  test('token exchange: the operator\'s client ID takes priority over the document', async ({ page, worker }) => {
+    const { exchanges } = await setupTokenExchange(page, worker, {
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] },
+    }, { clientId: 'other-client' });
+
+    await expect.poll(() => exchanges.length).toBe(1);
+  });
+
+  test('token exchange: a document\'s oidcConfig is ignored, without a client ID the scheme is unsupported', async ({ page, worker }) => {
+    const { exchanges } = await setupTokenExchange(page, worker, {
+      oidcConfigs: {},
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] },
+    }, { oidcConfig: { client_id: 'browser-client', metadata: { token_endpoint: 'https://evil.example/token' } } });
+
+    await expect(page.getByText(/is not supported by STAC Browser/i)).toBeVisible();
+    expect(exchanges).toHaveLength(0);
+  });
+  test('token exchange: the login asks for the email scope and uses the client ID of the document', async ({ page, worker }) => {
+    await page.context().route(OIDC_URL, (route) => route.fulfill({
+      status: 200,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      contentType: 'application/json',
+      body: JSON.stringify({
+        issuer: 'https://auth.example/',
+        authorization_endpoint: 'https://auth.example/authorize',
+        token_endpoint: 'https://auth.example/oauth/token',
+        jwks_uri: 'https://auth.example/.well-known/jwks.json',
+      }),
+    }));
+    let authorizeUrl = null;
+    await page.context().route('https://auth.example/authorize**', (route) => {
+      authorizeUrl = new URL(route.request().url());
+      return route.fulfill({ status: 200, contentType: 'text/html', body: '<p>login</p>' });
+    });
+
+    // No session for this client yet, so the user is sent to the login
+    await setupTokenExchange(page, worker, {
+      oidcConfigs: {},
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] },
+    }, { clientId: 'catalog-client' });
+
+    await expect.poll(() => authorizeUrl).not.toBeNull();
+    expect(authorizeUrl.searchParams.get('client_id')).toBe('catalog-client');
+    expect(authorizeUrl.searchParams.get('scope')).toBe('openid email profile');
+  });
 });

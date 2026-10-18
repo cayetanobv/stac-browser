@@ -44,7 +44,7 @@ function toDataUrl(blob) {
 /**
  * Whether the given URL must be loaded through an authenticated request
  * to receive the credentials (i.e. request headers are configured and the
- * URL is part of the catalog).
+ * URL may receive them, see the `receivesCredentials` getter).
  *
  * Query-parameter based credentials don't need this, they are part of the
  * URL returned by the `getRequestUrl` getter.
@@ -54,7 +54,7 @@ function toDataUrl(blob) {
  * @returns {boolean} `true` if an authenticated request is needed.
  */
 export function needsAuthenticatedFetch(store, url) {
-  return size(store.state.requestHeaders) > 0 && !store.getters.isExternalUrl(url);
+  return size(store.getters.getRequestHeaders(url)) > 0;
 }
 
 /**

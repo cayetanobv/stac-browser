@@ -12,9 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New config option `displayPreviewsForChildren` controls preview images on maps showing multiple Items
 - SVG icons, thumbnails and previews (`image/svg+xml`) are shown, SVG files are offered for download instead of being opened
 - Item Search: Support for the conformance class that requires the `collections` parameter (`item-search#require-collections`)
+- Authentication: Support for OAuth 2.0 Token Exchange (`oauth2` schemes with a `tokenExchange` flow) with the token of an OpenID Connect scheme. The exchanged credentials are only sent to the folders of the assets and links that reference the scheme.
+- New config option `oidcConfigs` provides the OpenID Connect client settings for schemes declared in STAC documents
+- Authentication: OpenID Connect schemes in STAC documents can provide the client ID in `clientId`
+- New config option `tokenExchanges` lists the token URLs that STAC Browser may exchange the user's token at and the URLs that may receive the exchanged credentials
 
 ### Fixed
 
+- Authentication: An `oidcConfig` in OpenID Connect schemes of STAC documents is ignored, it could change the endpoints of the login
 - Icons, logos and card thumbnails that fail to load are hidden
 - A page that is still loading no longer replaces the page that was navigated to in the meantime
 - "Search" on external content opens the search of the catalog instead of an error page

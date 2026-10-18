@@ -86,7 +86,7 @@ export default {
     // to the requests for the given URL. External URLs get no credentials.
     getRequestHeadersForStacLayer(ref, url) {
       if (needsAuthenticatedFetch(this.$store, url)) {
-        return this.$store.state.requestHeaders;
+        return this.$store.getters.getRequestHeaders(url);
       }
       return null;
     },
@@ -232,7 +232,7 @@ export default {
               options.transformRequest = (url, type) => {
                 const requestUrl = type === 'Tiles' ? this.getRequestUrlTemplate(url) : this.getRequestUrl(url);
                 if (needsAuthenticatedFetch(this.$store, url)) {
-                  return new Request(requestUrl, { headers: this.$store.state.requestHeaders });
+                  return new Request(requestUrl, { headers: this.$store.getters.getRequestHeaders(url) });
                 }
                 return requestUrl;
               };

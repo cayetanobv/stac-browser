@@ -46,6 +46,7 @@ import { size, URI } from 'stac-js/src/utils.js';
 import { mapGetters, mapState } from 'vuex';
 import AssetActions from '../../assetActions.config';
 import LinkActions from '../../linkActions.config';
+import Auth from '../auth/index.js';
 import AuthUtils from './auth/utils';
 import { browserProtocols } from 'stac-js/src/http';
 import { imageMediaTypes, geojsonMediaType, svgMediaType, wozMediaTypes, zarrMediaTypes } from 'stac-js/src/mediatypes';
@@ -99,14 +100,23 @@ export default {
     };
   },
   computed: {
-    ...mapState(['downloads', 'requestHeaders', 'buildTileUrlTemplate', 'useTileLayerAsFallback']),
-    ...mapGetters(['getRequestUrl', 'isExternalUrl']),
+    ...mapState(['downloads', 'buildTileUrlTemplate', 'useTileLayerAsFallback']),
+    ...mapGetters(['getRequestUrl', 'getRequestHeaders']),
     ...mapGetters('auth', ['isLoggedIn']),
+    ...mapGetters({ authMethod: 'auth/method' }),
     loading() {
       return Boolean(this.downloads[this.href]);
     },
     requiresAuth() {
-      return !this.isLoggedIn && this.auth.length > 0;
+      if (this.auth.length === 0) {
+        return false;
+      }
+      if (!this.isLoggedIn) {
+        return true;
+      }
+      // Exchanged credentials are scoped to the document they were issued for,
+      // so the assets of other documents require another exchange.
+      return AuthUtils.isTokenExchange(this.authMethod.options) && !this.auth.some(config => Auth.equals(this.authMethod, config));
     },
     tileRendererType() {
       if (this.tileUrlTemplate && !this.useTileLayerAsFallback) {
@@ -122,7 +132,7 @@ export default {
       if (typeof this.data.href !== 'string') {
         return false;
       }
-      return size(this.requestHeaders) > 0 && !this.isExternalUrl(this.data.getAbsoluteUrl());
+      return size(this.getRequestHeaders(this.data.getAbsoluteUrl())) > 0;
     },
     actions() {
       if (this.requiresAuth || this.requiresHeaderCredentials) {
@@ -198,7 +208,7 @@ export default {
       else if (typeof this.data.method === 'string' && this.data.method.toUpperCase() !== 'GET') {
         return true;
       }
-      else if (size(this.data.headers) > 0 || size(this.requestHeaders) > 0) {
+      else if (size(this.data.headers) > 0 || size(this.getRequestHeaders(this.data.getAbsoluteUrl())) > 0) {
         return true;
       }
       return false;

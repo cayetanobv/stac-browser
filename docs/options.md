@@ -67,7 +67,11 @@ The override order for the configuration is:
     - [API Keys](#api-keys)
     - [HTTP Basic](#http-basic)
     - [OpenID Connect](#openid-connect)
+    - [Client ID of schemes in STAC documents](#client-id-of-schemes-in-stac-documents)
+    - [OAuth 2.0 Token Exchange](#oauth-20-token-exchange)
     - [What gets authenticated](#what-gets-authenticated)
+  - [oidcConfigs](#oidcconfigs)
+  - [tokenExchanges](#tokenexchanges)
 - [Internationalization and Localization](#internationalization-and-localization)
   - [locale](#locale)
   - [fallbackLocale](#fallbacklocale)
@@ -362,10 +366,68 @@ For a given token `123` this results in the following additional HTTP Header:
 
 You can change the default behaviour to send it as a Bearer token by providing `in`, `name` and `format`.
 
+#### Client ID of schemes in STAC documents
+
+For `openIdConnect` schemes declared in STAC documents, the document can provide the client ID
+in a `clientId` field next to `openIdConnectUrl`. It's not part of the Authentication extension yet.
+
+```json
+"oidc": {
+  "type": "openIdConnect",
+  "openIdConnectUrl": "https://auth.example.com/.well-known/openid-configuration",
+  "clientId": "abc123"
+}
+```
+
+The STAC Browser URL plus `/auth` must be registered as a redirect URL for that client.
+The client settings configured through [`oidcConfigs`](#oidcconfigs) take priority over the document.
+An `oidcConfig` in a STAC document is ignored, as it could change any setting of the login, e.g. its endpoints.
+
+#### OAuth 2.0 Token Exchange
+
+STAC Browser supports the `tokenExchange` flow of `oauth2` schemes
+([RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693)) when it's declared in a STAC document
+through the [Authentication extension](https://github.com/stac-extensions/authentication).
+It can't be configured through `authConfig`.
+
+The scheme must reference an OpenID Connect scheme through its own `auth:refs`.
+The user signs in through the OpenID Connect scheme (see [above](#openid-connect) for the requirements)
+with the scopes `openid email profile`, as exchange endpoints usually identify the user by the email
+in the ID token (can be changed with `scope` in [`oidcConfigs`](#oidcconfigs)),
+then STAC Browser exchanges the token at the `tokenUrl` and sends the returned `access_token` as a Bearer token.
+If the scheme references multiple schemes, the user can choose one of them.
+
+The exchange request contains:
+
+- `subject_token_type` from the flow's `subjectTokenType`, defaults to `urn:ietf:params:oauth:token-type:id_token`
+- `subject_token`: the ID token or, if `subjectTokenType` is `urn:ietf:params:oauth:token-type:access_token`, the access token
+- `resource`: the URL of the STAC document that contains the asset or link
+- `scope`: the keys of the flow's `scopes`, if any
+
+The exchanged credentials are renewed before they expire (`expires_in`).
+As they are specific to a STAC document, the assets of another document require a new exchange.
+The login session of the OpenID Connect provider is reused for it.
+
+The token exchange URL must be allowed through [`tokenExchanges`](#tokenexchanges),
+otherwise the scheme is shown as unsupported.
+The OpenID Connect scheme must provide the client ID to sign in with, see
+[Client ID of schemes in STAC documents](#client-id-of-schemes-in-stac-documents),
+otherwise the scheme is shown as unsupported.
+The exchanged credentials are only sent to the URLs in the folders of the assets and links of the
+STAC document that reference the scheme. For example, for an asset at
+`https://storage.googleapis.com/bucket/folder/data.parquet` that's every URL starting with
+`https://storage.googleapis.com/bucket/folder/`, regardless of [`allowedDomains`](#alloweddomains).
+Additionally, the URLs must start with one of the URL prefixes configured for the token URL in
+[`tokenExchanges`](#tokenexchanges).
+They are not sent to any other URL, including the STAC documents of the catalog.
+
 #### What gets authenticated
 
 The credentials (query parameters or HTTP headers) are attached to all requests for URLs that are
-part of the catalog (see [`allowedDomains`](#alloweddomains)), external URLs never receive credentials:
+part of the catalog (see [`allowedDomains`](#alloweddomains)), external URLs never receive credentials.
+The credentials of an [OAuth 2.0 Token Exchange](#oauth-20-token-exchange) are only attached to the
+requests for the assets and links that reference the scheme instead.
+This applies to:
 
 - STAC documents (catalogs, collections, items, API requests)
 - Downloads
@@ -384,6 +446,52 @@ Known limitations:
 - Header-based credentials for images and tiles require the server to allow the headers in
   CORS preflight requests (the Fetch API is stricter than plain `<img>` elements).
 - Cookie-based authentication works independently of all this via [`crossOriginMedia: 'use-credentials'`](#crossoriginmedia).
+
+### oidcConfigs
+
+***experimental***
+
+OpenID Connect client settings for the `openIdConnect` schemes that are declared in STAC documents
+(through the [Authentication extension](https://github.com/stac-extensions/authentication)), incl.
+the ones that supply the token for an [OAuth 2.0 Token Exchange](#oauth-20-token-exchange).
+They take priority over the `clientId` of the document, e.g. to use a client registered for this
+STAC Browser instance.
+
+The keys are the `openIdConnectUrl` of the schemes, the values are the same as for `oidcConfig`
+in [OpenID Connect](#openid-connect). Defaults to `{}`.
+
+**Example:**
+
+```js
+{
+  'https://auth.example.com/.well-known/openid-configuration': {
+    client_id: 'abc123'
+  }
+}
+```
+
+### tokenExchanges
+
+***experimental***
+
+The [OAuth 2.0 Token Exchanges](#oauth-20-token-exchange) that STAC Browser may perform.
+The keys are the `tokenUrl`s that STAC Browser may send the user's token to, they must use HTTPS and match exactly.
+The values are lists of URL prefixes that may receive the exchanged credentials, e.g. the bucket and folder of the data.
+Defaults to `{}`, i.e. token exchange is disabled.
+
+The token URL and the URLs of the data are provided by the STAC document. Without this option, any STAC document
+(e.g. opened through `/external/`) could obtain the token of a user who is logged in or the exchanged credentials.
+Use URL prefixes that end with a `/` and are as specific as possible, as the credentials are sent to all URLs starting with them.
+
+**Example:**
+
+```js
+{
+  'https://broker.example/oauth/token': [
+    'https://storage.googleapis.com/private-bucket/'
+  ]
+}
+```
 
 ## Internationalization and Localization
 

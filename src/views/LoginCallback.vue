@@ -31,7 +31,8 @@ export default defineComponent({
       immediate: true,
       handler(newValue) {
         if (newValue) {
-          this.error = newValue;
+          // Show the underlying error instead of the generic message
+          this.error = newValue.error instanceof Error ? newValue.error : newValue;
           this.$store.commit('showGlobalError', null);
         }
       }

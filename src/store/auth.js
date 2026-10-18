@@ -21,6 +21,8 @@ export default function getStore(router) {
       method: () => new Auth(router),
       actions: [],
       credentials: null,
+      // The name of the request header that contains the credentials
+      credentialHeader: null,
       inProgress: false
     },
     getters: {
@@ -38,6 +40,9 @@ export default function getStore(router) {
       }
     },
     mutations: {
+      setCredentialHeader(state, key) {
+        state.credentialHeader = key;
+      },
       setCredentials(state, credentials) {
         state.credentials = credentials; // e.g. Username + Password or a Bearer Token
       },
@@ -64,6 +69,10 @@ export default function getStore(router) {
       async updateMethod(cx, config) {
         if (!Auth.equals(cx.getters.method, config)) {
           await cx.getters.method.close();
+          // Don't keep sending the credentials of the previous method
+          if (cx.getters.isLoggedIn) {
+            await cx.dispatch('updateCredentials', null);
+          }
         }
 
         const changeListener = async (isLoggedIn, credentials) => {
@@ -82,7 +91,7 @@ export default function getStore(router) {
           }
         };
 
-        const newAuth = await Auth.create(router, config, changeListener);
+        const newAuth = await Auth.create(router, config, changeListener, cx.rootState);
         cx.commit('setMethod', newAuth);
         await newAuth.resume();
       },
@@ -135,6 +144,7 @@ export default function getStore(router) {
         }
         else if (intent.header) {
           cx.commit('setRequestHeader', intent.header, { root: true });
+          cx.commit('setCredentialHeader', typeof intent.header.value === 'undefined' ? null : intent.header.key);
         }
         else if (intent.cookie) {
           const cookie = new Cookies(true);

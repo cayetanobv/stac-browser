@@ -1,0 +1,55 @@
+# Fork only, don't upstream: deploys this branch to GitHub Pages
+# (https://cayetanobv.github.io/stac-browser/) to test the token exchange.
+name: GitHub Pages (fork)
+on:
+  push:
+    branches:
+      - feature/auth-token-exchange
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    if: github.repository == 'cayetanobv/stac-browser'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 'lts/*'
+      - name: Install dependencies
+        run: npm ci
+      - name: Write config
+        run: |
+          cat > config.gh-pages.mjs <<'EOF'
+          export default {
+            pathPrefix: '/stac-browser/',
+            historyMode: 'history',
+            tokenExchanges: {
+              'https://sdi-publisher-broker-dev.carto.solutions/oauth/token': [
+                'https://storage.googleapis.com/carto-ps-portolan-sdi-dev-catalog-private/'
+              ]
+            }
+          };
+          EOF
+      - name: Build
+        run: npm run build
+        env:
+          SB_CONFIG: ./config.gh-pages.mjs
+      # GitHub Pages has no SPA fallback, serve the app for all paths (e.g. /auth)
+      - name: SPA fallback
+        run: cp dist/index.html dist/404.html && rm -f dist/report.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

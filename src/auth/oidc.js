@@ -1,10 +1,18 @@
 import Auth from "./index";
 
 import { UserManager } from 'oidc-client-ts';
+import { hasText, isObject } from 'stac-js/src/utils.js';
 
 export default class OIDC extends Auth {
 
-  constructor(router, options, changeListener) {
+  /**
+   * @param {Router} router
+   * @param {Object} options The scheme
+   * @param {Function} changeListener
+   * @param {Object} appConfig The STAC Browser config
+   * @param {Object} defaults Settings for oidc-client-ts that the scheme and the config can override
+   */
+  constructor(router, options, changeListener, appConfig = {}, defaults = {}) {
     super(router, options, changeListener);
 
     const oidcConfig = {
@@ -15,7 +23,11 @@ export default class OIDC extends Auth {
       automaticSilentRenew: true
     };
     this.user = null;
-    this.manager = new UserManager(Object.assign(oidcConfig, options.oidcConfig));
+    // The client ID of a scheme from a STAC document (see AuthUtils.fromDocument),
+    // the operator's settings for its OpenID Connect provider take priority
+    const documentConfig = hasText(options.clientId) ? { client_id: options.clientId } : null;
+    const operatorConfig = isObject(appConfig.oidcConfigs) ? appConfig.oidcConfigs[options.openIdConnectUrl] : null;
+    this.manager = new UserManager(Object.assign(oidcConfig, defaults, documentConfig, operatorConfig, options.oidcConfig));
     this.manager.events.addUserLoaded(async () => this.setUser(await this.manager.getUser()));
     this.manager.events.addAccessTokenExpired(() => this.setUser(null));
     this.manager.events.addUserUnloaded(() => this.setUser(null));
