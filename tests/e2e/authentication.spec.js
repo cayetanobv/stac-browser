@@ -731,4 +731,32 @@ test.describe('STAC Authentication extension', () => {
     await expect(page.getByText(/is not supported by STAC Browser/i)).toBeVisible();
     expect(exchanges).toHaveLength(0);
   });
+  test('token exchange: the login asks for the email scope and uses the client ID of the document', async ({ page, worker }) => {
+    await page.context().route(OIDC_URL, (route) => route.fulfill({
+      status: 200,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      contentType: 'application/json',
+      body: JSON.stringify({
+        issuer: 'https://auth.example/',
+        authorization_endpoint: 'https://auth.example/authorize',
+        token_endpoint: 'https://auth.example/oauth/token',
+        jwks_uri: 'https://auth.example/.well-known/jwks.json',
+      }),
+    }));
+    let authorizeUrl = null;
+    await page.context().route('https://auth.example/authorize**', (route) => {
+      authorizeUrl = new URL(route.request().url());
+      return route.fulfill({ status: 200, contentType: 'text/html', body: '<p>login</p>' });
+    });
+
+    // No session for this client yet, so the user is sent to the login
+    await setupTokenExchange(page, worker, {
+      oidcConfigs: {},
+      tokenExchanges: { [TOKEN_URL]: ['https://data.example/'] },
+    }, { clientId: 'catalog-client' });
+
+    await expect.poll(() => authorizeUrl).not.toBeNull();
+    expect(authorizeUrl.searchParams.get('client_id')).toBe('catalog-client');
+    expect(authorizeUrl.searchParams.get('scope')).toBe('openid email profile');
+  });
 });

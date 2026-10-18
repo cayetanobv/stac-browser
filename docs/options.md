@@ -391,7 +391,9 @@ through the [Authentication extension](https://github.com/stac-extensions/authen
 It can't be configured through `authConfig`.
 
 The scheme must reference an OpenID Connect scheme through its own `auth:refs`.
-The user signs in through the OpenID Connect scheme (see [above](#openid-connect) for the requirements),
+The user signs in through the OpenID Connect scheme (see [above](#openid-connect) for the requirements)
+with the scopes `openid email profile`, as exchange endpoints usually identify the user by the email
+in the ID token (can be changed with `scope` in [`oidcConfigs`](#oidcconfigs)),
 then STAC Browser exchanges the token at the `tokenUrl` and sends the returned `access_token` as a Bearer token.
 If the scheme references multiple schemes, the user can choose one of them.
 

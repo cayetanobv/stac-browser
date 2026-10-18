@@ -5,6 +5,9 @@ import AuthUtils from '../components/auth/utils';
 const GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:token-exchange';
 const ID_TOKEN = 'urn:ietf:params:oauth:token-type:id_token';
 const ACCESS_TOKEN = 'urn:ietf:params:oauth:token-type:access_token';
+// Exchange endpoints usually identify the user by the (verified) email of the ID token,
+// which only contains it if the email scope was requested
+const IDENTITY_SCOPE = 'openid email profile';
 // Exchange again this many seconds before the exchanged credentials expire
 const RENEW_MARGIN = 60;
 
@@ -23,7 +26,7 @@ const RENEW_MARGIN = 60;
 export default class TokenExchange extends OIDC {
 
   constructor(router, options, changeListener, appConfig = {}) {
-    super(router, TokenExchange.getIdentityScheme(options), changeListener, appConfig);
+    super(router, TokenExchange.getIdentityScheme(options), changeListener, appConfig, { scope: IDENTITY_SCOPE });
     this.options = options;
     this.renewTimer = null;
     // Operator allowed URL prefixes for the exchanged credentials, null if the exchange isn't allowed
